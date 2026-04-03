@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Engine — NSE F&O Live Chart</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{
+  --bg:#07090f;--bg2:#0c1120;--bg3:#111827;
+  --bdr:#1a2640;--bdr2:#223050;
+  --txt:#e2e8f0;--mut:#4b6080;
+  --grn:#00c076;--grn2:#34d399;
+  --red:#ff3b5c;--red2:#fb7185;
+  --yel:#f59e0b;--cyn:#00d4ff;
+  --pur:#a78bfa;--org:#fb923c;
+  --fd:'Syne',sans-serif;--fm:'Space Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--fm);font-size:12px}
+
+/* ── Header ── */
+.hdr{height:46px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--bdr);background:var(--bg);flex-shrink:0}
+.logo{font-family:var(--fd);font-weight:800;font-size:15px;letter-spacing:-.3px;display:flex;align-items:center;gap:7px}
+.ldot{width:6px;height:6px;border-radius:50%;background:var(--cyn);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.search-box{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:5px;padding:5px 10px;margin-left:12px}
+.search-box input{background:none;border:none;outline:none;color:var(--txt);font-family:var(--fm);font-size:11px;width:160px}
+.search-box input::placeholder{color:var(--mut)}
+.sresults{position:absolute;top:43px;left:230px;width:220px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:0 0 6px 6px;z-index:300;display:none}
+.sri{padding:7px 12px;cursor:pointer;font-size:11px;display:flex;justify-content:space-between;border-bottom:1px solid var(--bdr)}
+.sri:last-child{border-bottom:none}
+.sri:hover{background:var(--bdr)}
+.sri span{color:var(--mut);font-size:9px}
+.tf-row{display:flex;gap:3px;margin-left:6px}
+.tf{padding:4px 8px;background:transparent;border:1px solid var(--bdr);border-radius:3px;color:var(--mut);font-family:var(--fm);font-size:10px;cursor:pointer;transition:all .15s}
+.tf:hover{color:var(--txt);border-color:var(--bdr2)}
+.tf.on{background:var(--cyn);border-color:var(--cyn);color:#000;font-weight:700}
+.ml-auto{margin-left:auto}
+.conn{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut)}
+.cdot{width:5px;height:5px;border-radius:50%;background:var(--mut)}
+.cdot.live{background:var(--grn);box-shadow:0 0 5px var(--grn)}
+
+/* ── Main Layout ── */
+.body{display:flex;height:calc(100vh - 46px);overflow:hidden}
+
+/* ── Left watchlist ── */
+.sidebar{width:190px;flex-shrink:0;border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden}
+.sb-sec{padding:8px 10px 5px;font-size:9px;color:var(--mut);letter-spacing:2px;text-transform:uppercase;border-bottom:1px solid var(--bdr)}
+.idx-list{border-bottom:1px solid var(--bdr)}
+.idx-item{padding:8px 10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-left:2px solid transparent;transition:all .12s;font-size:11px}
+.idx-item:hover{background:var(--bg2)}
+.idx-item.on{background:var(--bg3);border-left-color:var(--cyn)}
+.idx-item .fo{font-size:8px;padding:1px 4px;background:rgba(0,212,255,.1);color:var(--cyn);border:1px solid rgba(0,212,255,.2);border-radius:3px}
+.wl{flex:1;overflow-y:auto}
+.wl::-webkit-scrollbar{width:2px}
+.wl::-webkit-scrollbar-thumb{background:var(--bdr2)}
+.wl-item{padding:7px 10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-left:2px solid transparent;transition:all .12s}
+.wl-item:hover{background:var(--bg2)}
+.wl-item.on{background:var(--bg3);border-left-color:var(--cyn)}
+.wn{font-size:11px;font-weight:700}
+.wp{font-size:9px;color:var(--mut);margin-top:1px}
+.sbadge{font-size:8px;font-weight:700;padding:2px 5px;border-radius:3px}
+.bsb{background:rgba(0,192,118,.15);color:var(--grn2);border:1px solid rgba(0,192,118,.3)}
+.bb{background:rgba(0,192,118,.08);color:var(--grn);border:1px solid rgba(0,192,118,.2)}
+.bn{background:rgba(75,96,128,.1);color:var(--mut);border:1px solid var(--bdr)}
+.bs{background:rgba(255,59,92,.08);color:var(--red);border:1px solid rgba(255,59,92,.2)}
+.bss{background:rgba(255,59,92,.15);color:var(--red2);border:1px solid rgba(255,59,92,.3)}
+
+/* ── Chart area ── */
+.chart-col{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.chart-main{flex:1;position:relative;min-height:0}
+#cv{width:100%;height:100%}
+
+/* ── Signal overlay ON the chart ── */
+.sig-overlay{
+  position:absolute;top:12px;left:12px;z-index:50;
+  background:rgba(7,9,15,.88);
+  border:1px solid var(--bdr2);
+  border-radius:8px;
+  padding:12px 14px;
+  min-width:200px;
+  pointer-events:none;
+}
+.sig-overlay::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:8px 8px 0 0;background:var(--sc,var(--mut));transition:background .4s}
+.so-sym{font-size:10px;color:var(--mut);letter-spacing:1px;margin-bottom:4px}
+.so-sig{font-family:var(--fd);font-size:20px;font-weight:800;letter-spacing:-.5px;color:var(--sc,var(--mut));transition:color .4s;line-height:1}
+.so-score{font-size:10px;color:var(--mut);margin-top:3px}
+.so-bar{height:3px;background:var(--bdr);border-radius:2px;margin-top:5px;overflow:hidden}
+.so-fill{height:100%;border-radius:2px;background:var(--sc,var(--mut));transition:width .8s cubic-bezier(.34,1.56,.64,1)}
+.so-levels{margin-top:10px;display:flex;flex-direction:column;gap:3px}
+.so-row{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.so-lbl{font-size:9px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+.so-val{font-size:11px;font-weight:700;font-family:var(--fm)}
+
+/* ── F&O box on chart (top right) ── */
+.fo-overlay{
+  position:absolute;top:12px;right:12px;z-index:50;
+  background:rgba(7,9,15,.88);
+  border:1px solid rgba(0,212,255,.2);
+  border-radius:8px;
+  padding:10px 13px;
+  min-width:175px;
+  pointer-events:none;
+  display:none;
+}
+.fo-title{font-size:9px;color:var(--cyn);letter-spacing:2px;text-transform:uppercase;margin-bottom:7px}
+.fo-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid rgba(26,38,64,.5)}
+.fo-row:last-child{border-bottom:none}
+.fo-l{font-size:9px;color:var(--mut)}
+.fo-v{font-size:10px;font-weight:700}
+
+/* ── RSI / MACD sub charts ── */
+.sub-row{height:100px;flex-shrink:0;display:flex;border-top:1px solid var(--bdr)}
+.sub{flex:1;position:relative;border-right:1px solid var(--bdr)}
+.sub:last-child{border-right:none}
+.sub-lbl{position:absolute;top:4px;left:8px;font-size:8px;color:var(--mut);letter-spacing:1px;z-index:10}
+#rsi-cv,#macd-cv{width:100%;height:100%}
+
+/* ── Loading ── */
+.loader{position:absolute;inset:0;background:rgba(7,9,15,.8);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:100}
+.spin{width:24px;height:24px;border:2px solid var(--bdr);border-top-color:var(--cyn);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ltxt{font-size:9px;color:var(--mut);letter-spacing:2px;text-transform:uppercase}
+
+/* ── Ind toggles ── */
+.ind-row{display:flex;gap:3px;margin-left:8px}
+.itog{padding:3px 7px;background:transparent;border:1px solid var(--bdr);border-radius:3px;color:var(--mut);font-family:var(--fm);font-size:9px;cursor:pointer;transition:all .15s}
+.itog.on[data-i="ema"]{color:var(--pur);border-color:var(--pur)}
+.itog.on[data-i="bb"]{color:var(--org);border-color:var(--org)}
+.itog.on[data-i="vol"]{color:var(--cyn);border-color:var(--cyn)}
+
+/* ── Ref line labels on chart ── */
+.price-tag{font-size:9px;font-family:var(--fm);font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr">
+  <div class="logo"><span class="ldot"></span>Signal Engine</div>
+
+  <div class="search-box" style="position:relative">
+    <span style="color:var(--mut);font-size:10px">⌕</span>
+    <input id="srch" placeholder="NSE stock ya index..." autocomplete="off">
+    <div class="sresults" id="sresults"></div>
+  </div>
+
+  <div class="tf-row">
+    <button class="tf" data-tf="5m">5m</button>
+    <button class="tf" data-tf="15m">15m</button>
+    <button class="tf" data-tf="1h">1H</button>
+    <button class="tf" data-tf="4h">4H</button>
+    <button class="tf on" data-tf="1d">1D</button>
+  </div>
+
+  <div class="ind-row">
+    <button class="itog on" data-i="ema">EMA</button>
+    <button class="itog on" data-i="bb">BB</button>
+    <button class="itog on" data-i="vol">VOL</button>
+  </div>
+
+  <div class="ml-auto" style="display:flex;align-items:center;gap:10px">
+    <span style="font-family:var(--fd);font-size:13px;font-weight:700" id="hdr-sym">—</span>
+    <span style="font-size:13px;font-weight:700;color:var(--grn)" id="hdr-price">—</span>
+    <button onclick="App.refresh()" style="background:transparent;border:1px solid var(--bdr);color:var(--mut);padding:3px 8px;border-radius:3px;cursor:pointer;font-family:var(--fm);font-size:9px">↻</button>
+    <div class="conn"><div class="cdot" id="cdot"></div><span id="cstat">—</span></div>
+  </div>
+</div>
+
+<!-- Body -->
+<div class="body">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sb-sec">Indices — F&O</div>
+    <div class="idx-list">
+      <div class="idx-item" id="idx-nsei" onclick="App.pick('^NSEI','15m')">
+        <span>NIFTY 50 <span class="fo">F&O</span></span>
+      </div>
+      <div class="idx-item" id="idx-bank" onclick="App.pick('^NSEBANK','15m')">
+        <span>BANK NIFTY <span class="fo">F&O</span></span>
+      </div>
+      <div class="idx-item" id="idx-bsesn" onclick="App.pick('^BSESN','1d')">
+        <span>SENSEX <span class="fo">F&O</span></span>
+      </div>
+    </div>
+    <div class="sb-sec">Stocks</div>
+    <div class="wl" id="wl">
+      <div style="padding:10px;color:var(--mut);font-size:10px">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Chart col -->
+  <div class="chart-col">
+
+    <!-- Main chart -->
+    <div class="chart-main">
+      <div id="cv"></div>
+
+      <!-- Signal overlay — top left ON chart -->
+      <div class="sig-overlay" id="sig-ov">
+        <div class="so-sym" id="so-sym">—</div>
+        <div class="so-sig" id="so-sig">—</div>
+        <div class="so-score" id="so-score">—</div>
+        <div class="so-bar"><div class="so-fill" id="so-fill" style="width:0%"></div></div>
+        <div class="so-levels">
+          <div class="so-row"><span class="so-lbl">Entry</span> <span class="so-val" id="lv-en" style="color:var(--txt)">—</span></div>
+          <div class="so-row"><span class="so-lbl">Stop Loss</span> <span class="so-val" id="lv-sl" style="color:var(--red)">—</span></div>
+          <div class="so-row"><span class="so-lbl">Target 1</span> <span class="so-val" id="lv-t1" style="color:var(--grn)">—</span></div>
+          <div class="so-row"><span class="so-lbl">Target 2</span> <span class="so-val" id="lv-t2" style="color:var(--grn2)">—</span></div>
+          <div class="so-row"><span class="so-lbl">Risk:Reward</span> <span class="so-val" id="lv-rr" style="color:var(--cyn)">—</span></div>
+        </div>
+      </div>
+
+      <!-- F&O overlay — top right ON chart -->
+      <div class="fo-overlay" id="fo-ov">
+        <div class="fo-title">F&O Signal</div>
+        <div class="fo-row"><span class="fo-l">Action</span><span class="fo-v" id="fo-act" style="color:var(--grn)">—</span></div>
+        <div class="fo-row"><span class="fo-l">Strike</span><span class="fo-v" id="fo-str" style="color:var(--txt)">—</span></div>
+        <div class="fo-row"><span class="fo-l">Expiry</span><span class="fo-v" id="fo-exp" style="color:var(--cyn)">—</span></div>
+        <div class="fo-row"><span class="fo-l">ATM</span><span class="fo-v" id="fo-atm" style="color:var(--yel)">—</span></div>
+        <div class="fo-row"><span class="fo-l">Lot Size</span><span class="fo-v" id="fo-lot" style="color:var(--mut)">—</span></div>
+        <div class="fo-row"><span class="fo-l">Risk/Lot</span><span class="fo-v" id="fo-rl" style="color:var(--red)">—</span></div>
+        <div class="fo-row"><span class="fo-l">Profit T1/Lot</span><span class="fo-v" id="fo-pt" style="color:var(--grn)">—</span></div>
+      </div>
+
+      <!-- Loading -->
+      <div class="loader" id="loader">
+        <div class="spin"></div>
+        <div class="ltxt">Data aa raha hai...</div>
+      </div>
+    </div>
+
+    <!-- Sub charts -->
+    <div class="sub-row">
+      <div class="sub"><div class="sub-lbl">RSI (14)</div><div id="rsi-cv"></div></div>
+      <div class="sub"><div class="sub-lbl">MACD (12,26,9)</div><div id="macd-cv"></div></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="chart.js"></script>
+<script src="signals.js"></script>
+</body>
+</html>
