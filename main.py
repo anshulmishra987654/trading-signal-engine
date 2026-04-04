@@ -191,3 +191,15 @@ async def on_startup():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host=config.APP_HOST, port=config.APP_PORT, reload=False)
+
+# Extra route for engine.js
+from fastapi.responses import FileResponse as FR
+
+@app.get("/engine.js")
+async def serve_enginejs():
+    path = find_file("engine.js")
+    if path:
+        return FR(path, media_type="application/javascript")
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"error":"engine.js not found"},status_code=404)
+
